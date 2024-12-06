@@ -13,21 +13,39 @@
     "daraja",
     "safaricom",
     "payment",
-    "sdk"
+    "sdk",
+    "stk-push",
+    "mobile-money"
   ],
-  "author": "",
+  "author": "Onesmus Bett",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/onesmuskipchumba0/daraja-javascript-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/onesmuskipchumba0/daraja-javascript-sdk/issues"
+  },
+  "homepage": "https://github.com/onesmuskipchumba0/daraja-javascript-sdk#readme",
   "dependencies": {
     "axios": "^1.6.2",
-    "dotenv": "^16.3.1",
-    "express": "^4.21.1",
-    "nodemon": "^3.1.7"
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
     "@babel/core": "^7.23.3",
     "@babel/preset-env": "^7.23.3",
     "babel-jest": "^29.7.0",
     "jest": "^29.7.0",
-    "nock": "^13.3.8"
-  }
+    "nock": "^13.3.8",
+    "express": "^4.21.1",
+    "nodemon": "^3.1.7"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ]
 }
