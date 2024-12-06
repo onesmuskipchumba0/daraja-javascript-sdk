@@ -88,9 +88,11 @@ try {
 }
 ```
 
-### Handling Callbacks
+### Handling M-Pesa Callbacks
 
-Set up an Express server to handle M-Pesa callbacks:
+### Setting up Callback Server
+
+To handle M-Pesa payment notifications, you'll need to set up an Express.js server. Here's how to do it:
 
 ```javascript
 const express = require('express');
@@ -99,7 +101,7 @@ const app = express();
 // Parse JSON bodies
 app.use(express.json());
 
-// M-Pesa callback endpoint
+// STK Push callback endpoint
 app.post('/mpesa/callback', (req, res) => {
   const { Body } = req.body;
   
@@ -108,29 +110,168 @@ app.post('/mpesa/callback', (req, res) => {
     
     if (ResultCode === 0) {
       // Payment successful
-      const metadata = CallbackMetadata.Item.reduce((acc, item) => {
+      const payment = CallbackMetadata.Item.reduce((acc, item) => {
         acc[item.Name] = item.Value;
         return acc;
       }, {});
       
-      console.log('Payment successful:', metadata);
+      // payment object will contain:
+      // {
+      //   Amount: 1000,
+      //   MpesaReceiptNumber: 'QDE5KXJLIO',
+      //   TransactionDate: 20230915093000,
+      //   PhoneNumber: 254712345678
+      // }
+      
+      console.log('Payment received:', payment);
+      
+      // Here you can:
+      // 1. Update your database
+      // 2. Send confirmation to customer
+      // 3. Fulfill the order
     } else {
       // Payment failed
       console.log('Payment failed:', ResultDesc);
     }
   }
   
-  // Always respond to M-Pesa
+  // Always respond to M-Pesa with a success
   res.json({
     ResultCode: 0,
     ResultDesc: "Success"
   });
 });
 
-app.listen(3000, () => {
-  console.log('Server running on port 3000');
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
 ```
+
+### Verifying Payments
+
+You can verify payments in two ways:
+
+1. Using the STK Query endpoint:
+```javascript
+const Daraja = require('daraja-javascript-sdk');
+const daraja = new Daraja();
+
+async function checkPaymentStatus(checkoutRequestId) {
+  try {
+    const status = await daraja.stkPushQuery({
+      checkoutRequestId: checkoutRequestId
+    });
+    
+    if (status.ResultCode === 0) {
+      console.log('Payment completed successfully');
+      return true;
+    } else {
+      console.log('Payment failed or pending:', status.ResultDesc);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error checking payment:', error);
+    return false;
+  }
+}
+```
+
+2. Using Transaction Status:
+```javascript
+async function verifyTransaction(transactionId) {
+  try {
+    const status = await daraja.transactionStatus({
+      transactionId: transactionId
+    });
+    
+    console.log('Transaction status:', status);
+    return status.ResultCode === 0;
+  } catch (error) {
+    console.error('Error verifying transaction:', error);
+    return false;
+  }
+}
+```
+
+### Best Practices
+
+1. **Store Payment Details**: Always save payment information in your database:
+```javascript
+// Example with MongoDB
+const mongoose = require('mongoose');
+
+const PaymentSchema = new mongoose.Schema({
+  transactionId: String,
+  amount: Number,
+  phoneNumber: String,
+  status: String,
+  mpesaReceiptNumber: String,
+  transactionDate: Date
+});
+
+const Payment = mongoose.model('Payment', PaymentSchema);
+
+// In your callback handler
+app.post('/mpesa/callback', async (req, res) => {
+  const { Body: { stkCallback } } = req.body;
+  
+  if (stkCallback.ResultCode === 0) {
+    const paymentData = stkCallback.CallbackMetadata.Item.reduce((acc, item) => {
+      acc[item.Name] = item.Value;
+      return acc;
+    }, {});
+    
+    try {
+      await Payment.create({
+        transactionId: stkCallback.CheckoutRequestID,
+        amount: paymentData.Amount,
+        phoneNumber: paymentData.PhoneNumber,
+        status: 'SUCCESS',
+        mpesaReceiptNumber: paymentData.MpesaReceiptNumber,
+        transactionDate: new Date()
+      });
+    } catch (error) {
+      console.error('Error saving payment:', error);
+    }
+  }
+  
+  res.json({ ResultCode: 0, ResultDesc: "Success" });
+});
+```
+
+2. **Handle Timeouts**: Implement timeout checks for pending payments:
+```javascript
+// When initiating STK Push
+const response = await daraja.stkPush({
+  phoneNumber: '254712345678',
+  amount: 1,
+  accountReference: 'TEST',
+  transactionDesc: 'Test Payment'
+});
+
+// Check status after 1 minute
+setTimeout(async () => {
+  const status = await daraja.stkPushQuery({
+    checkoutRequestId: response.CheckoutRequestID
+  });
+  
+  if (status.ResultCode !== 0) {
+    console.log('Payment timed out or failed');
+    // Handle timeout - update database, notify user, etc.
+  }
+}, 60000); // 1 minute timeout
+```
+
+3. **Secure Your Endpoints**: Always validate M-Pesa requests and use HTTPS in production.
+
+Remember to:
+- Use environment variables for sensitive data
+- Implement proper error handling
+- Log important events
+- Use HTTPS in production
+- Handle duplicate callbacks
+- Implement proper request validation
 
 ### B2C Payment
 
