@@ -262,108 +262,215 @@ app.get('/status/:checkoutRequestId', async (req, res) => {
 app.listen(3000, () => {
   console.log('Server running on http://localhost:3000');
 });
-```
 
-### Usage
+## Understanding M-Pesa Callbacks
 
-1. Start a payment:
-```bash
-curl -X POST http://localhost:3000/pay \
-  -H "Content-Type: application/json" \
-  -d '{"phone": "254712345678", "amount": 1}'
-```
+### How Callbacks Work
 
-2. Check payment status:
-```bash
-curl http://localhost:3000/status/ws_CO_123456789
-```
+When a customer makes a payment:
+1. The customer receives an STK push on their phone
+2. After they enter their PIN, M-Pesa processes the payment
+3. M-Pesa sends the result to your callback URL
+4. Your server processes this callback and updates your system
 
-Remember:
-- Use HTTPS in production
-- Store payments in a real database
-- Add proper error handling
-- Keep your API keys secure
+### Setting Up Your Callback URL
 
-### Best Practices
+#### 1. Requirements for Callback URLs
+- Must be a public HTTPS URL (M-Pesa doesn't accept HTTP)
+- Must be accessible from the internet
+- Standard ports (443 for HTTPS)
 
-1. **Store Payment Details**: Always save payment information in your database:
+#### 2. Options for Callback URLs
+
+**Option 1: Using a Domain**
 ```javascript
-// Example with MongoDB
-const mongoose = require('mongoose');
+const daraja = new Daraja({
+  callbackUrl: 'https://your-domain.com/mpesa/callback'
+});
+```
 
-const PaymentSchema = new mongoose.Schema({
-  transactionId: String,
-  amount: Number,
-  phoneNumber: String,
-  status: String,
-  mpesaReceiptNumber: String,
-  transactionDate: Date
+**Option 2: Using Ngrok for Development**
+1. Install ngrok:
+```bash
+npm install -g ngrok
+```
+
+2. Start your Express server:
+```bash
+node server.js  # Running on port 3000
+```
+
+3. Start ngrok:
+```bash
+ngrok http 3000
+```
+
+4. Use the ngrok URL as your callback:
+```javascript
+const daraja = new Daraja({
+  callbackUrl: 'https://your-ngrok-url.ngrok.io/mpesa/callback'
+});
+```
+
+#### 3. Example with Domain Setup
+
+1. Create your server file (server.js):
+```javascript
+const express = require('express');
+const Daraja = require('daraja-javascript-sdk');
+const app = express();
+
+// Parse JSON bodies
+app.use(express.json());
+
+// Initialize Daraja with your domain
+const daraja = new Daraja({
+  consumerKey: process.env.CONSUMER_KEY,
+  consumerSecret: process.env.CONSUMER_SECRET,
+  callbackUrl: 'https://your-domain.com/mpesa/callback'  // Your domain
 });
 
-const Payment = mongoose.model('Payment', PaymentSchema);
+// Endpoint to start payment
+app.post('/start-payment', async (req, res) => {
+  try {
+    const result = await daraja.stkPush({
+      phoneNumber: '254712345678',
+      amount: 1,
+      accountReference: 'TEST',
+      transactionDesc: 'Test Payment'
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-// In your callback handler
-app.post('/mpesa/callback', async (req, res) => {
-  const { Body: { stkCallback } } = req.body;
+// Callback endpoint that M-Pesa will call
+app.post('/mpesa/callback', (req, res) => {
+  const { Body } = req.body;
   
-  if (stkCallback.ResultCode === 0) {
-    const paymentData = stkCallback.CallbackMetadata.Item.reduce((acc, item) => {
-      acc[item.Name] = item.Value;
-      return acc;
-    }, {});
-    
-    try {
-      await Payment.create({
-        transactionId: stkCallback.CheckoutRequestID,
-        amount: paymentData.Amount,
-        phoneNumber: paymentData.PhoneNumber,
-        status: 'SUCCESS',
-        mpesaReceiptNumber: paymentData.MpesaReceiptNumber,
-        transactionDate: new Date()
-      });
-    } catch (error) {
-      console.error('Error saving payment:', error);
+  if (Body.stkCallback) {
+    if (Body.stkCallback.ResultCode === 0) {
+      // Payment successful
+      const items = Body.stkCallback.CallbackMetadata.Item;
+      const amount = items.find(item => item.Name === 'Amount').Value;
+      const receipt = items.find(item => item.Name === 'MpesaReceiptNumber').Value;
+      
+      console.log(`Received payment of ${amount} KSH, receipt: ${receipt}`);
+      
+      // TODO: Update your database
+      // TODO: Notify your customer
     }
   }
   
+  // Always respond to M-Pesa
+  res.json({ ResultCode: 0, ResultDesc: "Success" });
+});
+
+app.listen(3000, () => {
+  console.log('Server running on port 3000');
+});
+```
+
+### Testing Callbacks
+
+1. **Local Development (using ngrok)**
+```bash
+# Terminal 1: Start your server
+node server.js
+
+# Terminal 2: Start ngrok
+ngrok http 3000
+
+# Copy the HTTPS URL from ngrok output
+# Example: https://abc123.ngrok.io
+```
+
+2. **Production Domain**
+- Point your domain to your server
+- Set up SSL certificate (required by M-Pesa)
+- Update your callback URL in the Daraja configuration
+
+### Common Callback Issues
+
+1. **Callback Not Received**
+- Check if URL is publicly accessible
+- Verify HTTPS is properly set up
+- Ensure correct port is open
+- Check ngrok tunnel is running (if using ngrok)
+
+2. **Invalid Response**
+- Always respond with:
+```javascript
+res.json({ ResultCode: 0, ResultDesc: "Success" });
+```
+
+3. **HTTPS Issues**
+- M-Pesa requires valid SSL certificates
+- Self-signed certificates won't work
+- Use Let's Encrypt for free SSL certificates
+
+### Best Practices for Callbacks
+
+1. **Log Everything**
+```javascript
+app.post('/mpesa/callback', (req, res) => {
+  // Log incoming callback
+  console.log('Received callback:', JSON.stringify(req.body));
+  
+  // Process callback
+  // ...
+  
+  // Log response
+  console.log('Sending response to M-Pesa');
   res.json({ ResultCode: 0, ResultDesc: "Success" });
 });
 ```
 
-2. **Handle Timeouts**: Implement timeout checks for pending payments:
+2. **Handle Duplicate Callbacks**
 ```javascript
-// When initiating STK Push
-const response = await daraja.stkPush({
-  phoneNumber: '254712345678',
-  amount: 1,
-  accountReference: 'TEST',
-  transactionDesc: 'Test Payment'
-});
+const processedTransactions = new Set();
 
-// Check status after 1 minute
+app.post('/mpesa/callback', (req, res) => {
+  const transactionId = req.body.Body.stkCallback.CheckoutRequestID;
+  
+  if (processedTransactions.has(transactionId)) {
+    console.log('Duplicate transaction:', transactionId);
+    return res.json({ ResultCode: 0, ResultDesc: "Success" });
+  }
+  
+  processedTransactions.add(transactionId);
+  // Process the payment...
+});
+```
+
+3. **Add Timeout Handling**
+```javascript
+// When starting payment
+const result = await daraja.stkPush({...});
+
+// Set timeout to check status
 setTimeout(async () => {
   const status = await daraja.stkPushQuery({
-    checkoutRequestId: response.CheckoutRequestID
+    checkoutRequestId: result.CheckoutRequestID
   });
   
   if (status.ResultCode !== 0) {
-    console.log('Payment timed out or failed');
-    // Handle timeout - update database, notify user, etc.
+    // Handle timeout
+    console.log('Payment timed out');
   }
-}, 60000); // 1 minute timeout
+}, 60000); // Check after 1 minute
 ```
 
-3. **Secure Your Endpoints**: Always validate M-Pesa requests and use HTTPS in production.
+Remember:
+- Always use HTTPS in production
+- Keep your callback endpoint simple and fast
+- Log all requests and responses
+- Handle errors gracefully
+- Store transaction details in a database
+- Implement proper security measures
 
-Remember to:
-- Use environment variables for sensitive data
-- Implement proper error handling
-- Log important events
-- Use HTTPS in production
-- Handle duplicate callbacks
-- Implement proper request validation
-
-### B2C Payment
+## B2C Payment
 
 Send money from your business to customers:
 
