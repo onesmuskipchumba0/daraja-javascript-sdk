@@ -110,14 +110,18 @@ const daraja = new DarajaSDK({
   timeout: 30000 // 30 seconds
 });
 ```
-
 ### STK Push
 
-STK Push initiates a payment prompt on the customer's phone.
+STK Push is a service that allows you to request a user to enter a PIN and authenticate a transaction. It is commonly used for online transactions.
 
+The service is ideal for situations where you want to request a user to make a payment online. For example, you can use it to process a payment for an e-commerce transaction.
+
+The service will send a request to the user's phone, prompting them to enter a PIN and authenticate the transaction. Once the user has successfully entered their PIN, the service will send a response back to your application, confirming that the transaction was successful.
+
+Here is an example of how you can use the SDK to initiate a STK Push:
 ```javascript
 // Basic STK Push
-try {
+try { 
   const response = await daraja.stkPush({
     phoneNumber: '254712345678',
     amount: 1,
@@ -128,7 +132,6 @@ try {
 } catch (error) {
   console.error('STK Push Error:', error);
 }
-
 // Advanced STK Push with all options
 const stkOptions = {
   phoneNumber: '254712345678',
