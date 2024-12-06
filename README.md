@@ -90,109 +90,199 @@ try {
 
 ### Handling M-Pesa Callbacks
 
-### Setting up Callback Server
+### Basic Callback Setup
 
-To handle M-Pesa payment notifications, you'll need to set up an Express.js server. Here's how to do it:
+Here's a simple Express.js server to handle M-Pesa payment notifications:
 
 ```javascript
 const express = require('express');
 const app = express();
 
-// Parse JSON bodies
+// Allow JSON requests
 app.use(express.json());
 
-// STK Push callback endpoint
+// Handle M-Pesa payments
 app.post('/mpesa/callback', (req, res) => {
+  // Get the payment details
   const { Body } = req.body;
   
   if (Body.stkCallback) {
-    const { ResultCode, ResultDesc, CallbackMetadata } = Body.stkCallback;
-    
-    if (ResultCode === 0) {
-      // Payment successful
-      const payment = CallbackMetadata.Item.reduce((acc, item) => {
-        acc[item.Name] = item.Value;
-        return acc;
-      }, {});
+    // Check if payment was successful
+    if (Body.stkCallback.ResultCode === 0) {
+      // Get payment details
+      const items = Body.stkCallback.CallbackMetadata.Item;
+      const amount = items.find(item => item.Name === 'Amount').Value;
+      const mpesaReceipt = items.find(item => item.Name === 'MpesaReceiptNumber').Value;
+      const phoneNumber = items.find(item => item.Name === 'PhoneNumber').Value;
       
-      // payment object will contain:
-      // {
-      //   Amount: 1000,
-      //   MpesaReceiptNumber: 'QDE5KXJLIO',
-      //   TransactionDate: 20230915093000,
-      //   PhoneNumber: 254712345678
-      // }
+      console.log('Payment Received!');
+      console.log('Amount:', amount);
+      console.log('Receipt Number:', mpesaReceipt);
+      console.log('Phone Number:', phoneNumber);
       
-      console.log('Payment received:', payment);
+      // TODO: Update your database
+      // TODO: Send confirmation to customer
       
-      // Here you can:
-      // 1. Update your database
-      // 2. Send confirmation to customer
-      // 3. Fulfill the order
     } else {
       // Payment failed
-      console.log('Payment failed:', ResultDesc);
+      console.log('Payment failed:', Body.stkCallback.ResultDesc);
     }
   }
   
-  // Always respond to M-Pesa with a success
-  res.json({
-    ResultCode: 0,
-    ResultDesc: "Success"
-  });
+  // Always respond to M-Pesa
+  res.json({ ResultCode: 0, ResultDesc: "Success" });
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Start server
+app.listen(3000, () => {
+  console.log('Server is running on port 3000');
 });
 ```
 
-### Verifying Payments
+### Checking Payment Status
 
-You can verify payments in two ways:
+Simple way to check if a payment was successful:
 
-1. Using the STK Query endpoint:
 ```javascript
 const Daraja = require('daraja-javascript-sdk');
 const daraja = new Daraja();
 
-async function checkPaymentStatus(checkoutRequestId) {
+// Check payment status
+async function checkPayment(checkoutRequestId) {
   try {
-    const status = await daraja.stkPushQuery({
+    const result = await daraja.stkPushQuery({
       checkoutRequestId: checkoutRequestId
     });
     
-    if (status.ResultCode === 0) {
-      console.log('Payment completed successfully');
-      return true;
+    if (result.ResultCode === 0) {
+      console.log('Payment was successful!');
     } else {
-      console.log('Payment failed or pending:', status.ResultDesc);
-      return false;
+      console.log('Payment failed or pending');
     }
   } catch (error) {
-    console.error('Error checking payment:', error);
-    return false;
+    console.log('Error checking payment:', error.message);
   }
 }
 ```
 
-2. Using Transaction Status:
+### Complete Example
+
+Here's a complete example showing how to:
+1. Start a payment
+2. Save payment details
+3. Handle the callback
+
 ```javascript
-async function verifyTransaction(transactionId) {
+const express = require('express');
+const Daraja = require('daraja-javascript-sdk');
+
+const app = express();
+app.use(express.json());
+
+// Store payments in memory (use a database in production)
+const payments = [];
+
+// Initialize Daraja
+const daraja = new Daraja();
+
+// Start payment
+app.post('/pay', async (req, res) => {
   try {
-    const status = await daraja.transactionStatus({
-      transactionId: transactionId
+    const { phone, amount } = req.body;
+    
+    // Start STK Push
+    const result = await daraja.stkPush({
+      phoneNumber: phone,
+      amount: amount,
+      accountReference: 'Test',
+      transactionDesc: 'Test Payment'
     });
     
-    console.log('Transaction status:', status);
-    return status.ResultCode === 0;
+    // Save payment details
+    payments.push({
+      checkoutRequestId: result.CheckoutRequestID,
+      amount: amount,
+      phone: phone,
+      status: 'pending'
+    });
+    
+    res.json({ 
+      message: 'Payment started',
+      checkoutRequestId: result.CheckoutRequestID
+    });
+    
   } catch (error) {
-    console.error('Error verifying transaction:', error);
-    return false;
+    res.status(500).json({ error: error.message });
   }
-}
+});
+
+// Handle M-Pesa callback
+app.post('/mpesa/callback', (req, res) => {
+  const { Body } = req.body;
+  
+  if (Body.stkCallback) {
+    const { ResultCode, ResultDesc, CheckoutRequestID } = Body.stkCallback;
+    
+    // Find the payment
+    const payment = payments.find(p => p.checkoutRequestId === CheckoutRequestID);
+    if (payment) {
+      if (ResultCode === 0) {
+        // Payment successful
+        const items = Body.stkCallback.CallbackMetadata.Item;
+        payment.status = 'completed';
+        payment.mpesaReceipt = items.find(item => item.Name === 'MpesaReceiptNumber').Value;
+        
+        console.log('Payment completed:', payment);
+      } else {
+        // Payment failed
+        payment.status = 'failed';
+        payment.error = ResultDesc;
+        
+        console.log('Payment failed:', ResultDesc);
+      }
+    }
+  }
+  
+  res.json({ ResultCode: 0, ResultDesc: "Success" });
+});
+
+// Check payment status
+app.get('/status/:checkoutRequestId', async (req, res) => {
+  const { checkoutRequestId } = req.params;
+  
+  // Find payment in our records
+  const payment = payments.find(p => p.checkoutRequestId === checkoutRequestId);
+  if (!payment) {
+    return res.status(404).json({ error: 'Payment not found' });
+  }
+  
+  res.json({ payment });
+});
+
+app.listen(3000, () => {
+  console.log('Server running on http://localhost:3000');
+});
 ```
+
+### Usage
+
+1. Start a payment:
+```bash
+curl -X POST http://localhost:3000/pay \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "254712345678", "amount": 1}'
+```
+
+2. Check payment status:
+```bash
+curl http://localhost:3000/status/ws_CO_123456789
+```
+
+Remember:
+- Use HTTPS in production
+- Store payments in a real database
+- Add proper error handling
+- Keep your API keys secure
 
 ### Best Practices
 
