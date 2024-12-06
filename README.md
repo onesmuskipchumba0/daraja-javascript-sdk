@@ -325,8 +325,6 @@ app.use(express.json());
 
 // Initialize Daraja with your domain
 const daraja = new Daraja({
-  consumerKey: process.env.CONSUMER_KEY,
-  consumerSecret: process.env.CONSUMER_SECRET,
   callbackUrl: 'https://your-domain.com/mpesa/callback'  // Your domain
 });
 
