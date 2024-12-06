@@ -2,14 +2,46 @@ const axios = require('axios');
 require('dotenv').config();
 
 class DarajaSDK {
-  constructor(config) {
-    this.consumerKey = config.consumerKey;
-    this.consumerSecret = config.consumerSecret;
-    this.environment = config.environment || 'sandbox';
+  constructor(config = {}) {
+    // Use environment variables by default, but allow override through config
+    this.consumerKey = config.consumerKey || process.env.CONSUMER_KEY;
+    this.consumerSecret = config.consumerSecret || process.env.CONSUMER_SECRET;
+    this.environment = config.environment || process.env.ENVIRONMENT || 'sandbox';
+    this.businessShortCode = config.businessShortCode || process.env.BUSINESS_SHORT_CODE;
+    this.passKey = config.passKey || process.env.PASS_KEY;
+    this.callbackUrl = config.callbackUrl || process.env.CALLBACK_URL;
+    this.timeoutUrl = config.timeoutUrl || process.env.TIMEOUT_URL;
+    this.resultUrl = config.resultUrl || process.env.RESULT_URL;
+    this.initiatorName = config.initiatorName || process.env.INITIATOR_NAME;
+    this.securityCredential = config.securityCredential || process.env.SECURITY_CREDENTIAL;
+
+    // Validate required configurations
+    this.validateConfig();
+
     this.baseUrl = this.environment === 'production'
       ? 'https://api.safaricom.co.ke'
       : 'https://sandbox.safaricom.co.ke';
     this.auth = null;
+  }
+
+  validateConfig() {
+    const required = {
+      'Consumer Key': this.consumerKey,
+      'Consumer Secret': this.consumerSecret,
+      'Business Short Code': this.businessShortCode,
+      'Pass Key': this.passKey,
+      'Callback URL': this.callbackUrl,
+      'Initiator Name': this.initiatorName,
+      'Security Credential': this.securityCredential
+    };
+
+    const missing = Object.entries(required)
+      .filter(([_, value]) => !value)
+      .map(([key]) => key);
+
+    if (missing.length > 0) {
+      throw new Error(`Missing required configuration: ${missing.join(', ')}. Please provide them in .env file or in the constructor.`);
+    }
   }
 
   async generateToken() {
@@ -34,7 +66,7 @@ class DarajaSDK {
       if (!this.auth) await this.generateToken();
 
       const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, -3);
-      const password = Buffer.from(`${process.env.BUSINESS_SHORT_CODE}${process.env.PASS_KEY}${timestamp}`).toString('base64');
+      const password = Buffer.from(`${this.businessShortCode}${this.passKey}${timestamp}`).toString('base64');
 
       const response = await axios({
         method: 'post',
@@ -43,15 +75,15 @@ class DarajaSDK {
           Authorization: `Bearer ${this.auth}`,
         },
         data: {
-          BusinessShortCode: process.env.BUSINESS_SHORT_CODE,
+          BusinessShortCode: this.businessShortCode,
           Password: password,
           Timestamp: timestamp,
           TransactionType: 'CustomerPayBillOnline',
           Amount: amount,
           PartyA: phoneNumber,
-          PartyB: process.env.BUSINESS_SHORT_CODE,
+          PartyB: this.businessShortCode,
           PhoneNumber: phoneNumber,
-          CallBackURL: process.env.CALLBACK_URL,
+          CallBackURL: this.callbackUrl,
           AccountReference: accountReference,
           TransactionDesc: transactionDesc,
         },
@@ -59,6 +91,9 @@ class DarajaSDK {
 
       return response.data;
     } catch (error) {
+      if (error.response) {
+        throw new Error(`STK push failed: ${error.response.data.errorMessage || error.message}`);
+      }
       throw new Error(`STK push failed: ${error.message}`);
     }
   }
@@ -74,15 +109,15 @@ class DarajaSDK {
           Authorization: `Bearer ${this.auth}`,
         },
         data: {
-          InitiatorName: process.env.INITIATOR_NAME,
-          SecurityCredential: process.env.SECURITY_CREDENTIAL,
+          InitiatorName: this.initiatorName,
+          SecurityCredential: this.securityCredential,
           CommandID: commandID || 'BusinessPayment',
           Amount: amount,
-          PartyA: process.env.BUSINESS_SHORT_CODE,
+          PartyA: this.businessShortCode,
           PartyB: phoneNumber,
           Remarks: remarks || 'B2C Payment',
-          QueueTimeOutURL: process.env.TIMEOUT_URL,
-          ResultURL: process.env.RESULT_URL,
+          QueueTimeOutURL: this.timeoutUrl,
+          ResultURL: this.resultUrl,
           Occasion: '',
         },
       });
@@ -104,14 +139,14 @@ class DarajaSDK {
           Authorization: `Bearer ${this.auth}`,
         },
         data: {
-          Initiator: process.env.INITIATOR_NAME,
-          SecurityCredential: process.env.SECURITY_CREDENTIAL,
+          Initiator: this.initiatorName,
+          SecurityCredential: this.securityCredential,
           CommandID: 'TransactionStatusQuery',
           TransactionID: transactionID,
-          PartyA: process.env.BUSINESS_SHORT_CODE,
+          PartyA: this.businessShortCode,
           IdentifierType: '4',
-          ResultURL: process.env.RESULT_URL,
-          QueueTimeOutURL: process.env.TIMEOUT_URL,
+          ResultURL: this.resultUrl,
+          QueueTimeOutURL: this.timeoutUrl,
           Remarks: 'Transaction Status Query',
           Occasion: '',
         },
@@ -134,14 +169,14 @@ class DarajaSDK {
           Authorization: `Bearer ${this.auth}`,
         },
         data: {
-          Initiator: process.env.INITIATOR_NAME,
-          SecurityCredential: process.env.SECURITY_CREDENTIAL,
+          Initiator: this.initiatorName,
+          SecurityCredential: this.securityCredential,
           CommandID: 'AccountBalance',
-          PartyA: process.env.BUSINESS_SHORT_CODE,
+          PartyA: this.businessShortCode,
           IdentifierType: '4',
           Remarks: 'Account Balance Query',
-          QueueTimeOutURL: process.env.TIMEOUT_URL,
-          ResultURL: process.env.RESULT_URL,
+          QueueTimeOutURL: this.timeoutUrl,
+          ResultURL: this.resultUrl,
         },
       });
 
