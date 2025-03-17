@@ -516,6 +516,92 @@ try {
 }
 ```
 
+## C2B (Customer to Business)
+
+Register URLs for C2B transactions and simulate payments (simulation only works in sandbox):
+
+```javascript
+// Register URLs for C2B
+try {
+  const response = await daraja.c2bRegisterUrl({
+    shortCode: '123456',  // Optional, uses businessShortCode by default
+    responseType: 'Completed',  // Optional
+    confirmationUrl: 'https://your-domain.com/mpesa/confirmation',
+    validationUrl: 'https://your-domain.com/mpesa/validation'
+  });
+  
+  console.log('C2B URLs registered:', response);
+} catch (error) {
+  console.error('C2B URL registration failed:', error);
+}
+
+// Simulate C2B payment (sandbox only)
+try {
+  const response = await daraja.c2bSimulate({
+    amount: 100,
+    phoneNumber: '254712345678',
+    billRefNumber: 'TEST123'
+  });
+  
+  console.log('C2B Simulation:', response);
+} catch (error) {
+  console.error('C2B Simulation failed:', error);
+}
+```
+
+## B2B (Business to Business)
+
+Transfer money between businesses:
+
+```javascript
+try {
+  const response = await daraja.b2b({
+    amount: 1000,
+    receiverShortCode: '987654',
+    commandID: 'BusinessToBusinessTransfer',  // Optional
+    remarks: 'Supplier Payment'  // Optional
+  });
+  
+  console.log('B2B Response:', response);
+} catch (error) {
+  console.error('B2B Transfer failed:', error);
+}
+```
+
+## Transaction Reversal
+
+Reverse an M-Pesa transaction:
+
+```javascript
+try {
+  const response = await daraja.reversal({
+    transactionID: 'ABCD1234',
+    amount: 100,
+    remarks: 'Wrong payment'  // Optional
+  });
+  
+  console.log('Reversal Response:', response);
+} catch (error) {
+  console.error('Reversal failed:', error);
+}
+```
+
+## STK Push Status Query
+
+Check the status of an STK push request:
+
+```javascript
+try {
+  const response = await daraja.stkPushQuery({
+    checkoutRequestId: 'ws_CO_123456789'
+  });
+  
+  console.log('STK Query Response:', response);
+} catch (error) {
+  console.error('STK Query failed:', error);
+}
+```
+
 ## Testing
 
 For testing purposes, use these sandbox credentials:
