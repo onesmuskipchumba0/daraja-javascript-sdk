@@ -1,7 +1,25 @@
 const axios = require('axios');
 require('dotenv').config();
 
+/**
+ * DarajaSDK - A class for interacting with the Safaricom M-Pesa Daraja API
+ * @class
+ */
 class DarajaSDK {
+  /**
+   * Create a new DarajaSDK instance
+   * @param {Object} config - Configuration options
+   * @param {string} [config.consumerKey] - The consumer key from the Daraja API
+   * @param {string} [config.consumerSecret] - The consumer secret from the Daraja API
+   * @param {string} [config.environment='sandbox'] - The API environment ('sandbox' or 'production')
+   * @param {string} [config.businessShortCode] - The business short code (till/paybill number)
+   * @param {string} [config.passKey] - The pass key for generating security credentials
+   * @param {string} [config.callbackUrl] - The URL where M-Pesa will send payment notifications
+   * @param {string} [config.timeoutUrl] - The URL where M-Pesa will send timeout notifications
+   * @param {string} [config.resultUrl] - The URL where M-Pesa will send results
+   * @param {string} [config.initiatorName] - The name of the initiator for B2B/B2C transactions
+   * @param {string} [config.securityCredential] - The security credential for B2B/B2C transactions
+   */
   constructor(config = {}) {
     // Use environment variables by default, but allow override through config
     this.consumerKey = config.consumerKey || process.env.CONSUMER_KEY;
@@ -24,6 +42,11 @@ class DarajaSDK {
     this.auth = null;
   }
 
+  /**
+   * Validates required configuration parameters
+   * @private
+   * @throws {Error} If required configuration is missing
+   */
   validateConfig() {
     const required = {
       'Consumer Key': this.consumerKey,
@@ -44,6 +67,12 @@ class DarajaSDK {
     }
   }
 
+  /**
+   * Generates an OAuth access token for API authentication
+   * @async
+   * @returns {Promise<string>} The generated access token
+   * @throws {Error} If token generation fails
+   */
   async generateToken() {
     try {
       const auth = Buffer.from(`${this.consumerKey}:${this.consumerSecret}`).toString('base64');
@@ -61,6 +90,17 @@ class DarajaSDK {
     }
   }
 
+  /**
+   * Initiates an STK push request to customer's phone
+   * @async
+   * @param {Object} params - STK push parameters
+   * @param {string} params.phoneNumber - Customer's phone number (254XXXXXXXXX)
+   * @param {number} params.amount - Amount to charge
+   * @param {string} params.accountReference - Reference for the transaction
+   * @param {string} params.transactionDesc - Description of the transaction
+   * @returns {Promise<Object>} STK push response
+   * @throws {Error} If STK push fails
+   */
   async stkPush({ phoneNumber, amount, accountReference, transactionDesc }) {
     try {
       if (!this.auth) await this.generateToken();
@@ -98,6 +138,17 @@ class DarajaSDK {
     }
   }
 
+  /**
+   * Sends money from business to customer (B2C)
+   * @async
+   * @param {Object} params - B2C parameters
+   * @param {number} params.amount - Amount to send
+   * @param {string} params.phoneNumber - Recipient's phone number
+   * @param {string} [params.commandID='BusinessPayment'] - Type of B2C payment
+   * @param {string} [params.remarks] - Additional remarks
+   * @returns {Promise<Object>} B2C response
+   * @throws {Error} If B2C payment fails
+   */
   async b2c({ amount, phoneNumber, commandID, remarks }) {
     try {
       if (!this.auth) await this.generateToken();
@@ -128,6 +179,14 @@ class DarajaSDK {
     }
   }
 
+  /**
+   * Checks the status of an M-Pesa transaction
+   * @async
+   * @param {Object} params - Transaction status parameters
+   * @param {string} params.transactionID - M-Pesa transaction ID
+   * @returns {Promise<Object>} Transaction status response
+   * @throws {Error} If status check fails
+   */
   async transactionStatus({ transactionID }) {
     try {
       if (!this.auth) await this.generateToken();
@@ -158,6 +217,12 @@ class DarajaSDK {
     }
   }
 
+  /**
+   * Queries the account balance
+   * @async
+   * @returns {Promise<Object>} Account balance response
+   * @throws {Error} If balance query fails
+   */
   async accountBalance() {
     try {
       if (!this.auth) await this.generateToken();
@@ -186,6 +251,17 @@ class DarajaSDK {
     }
   }
 
+  /**
+   * Registers URLs for C2B payment notifications
+   * @async
+   * @param {Object} params - URL registration parameters
+   * @param {string} [params.shortCode] - Business short code
+   * @param {string} [params.responseType='Completed'] - Response type
+   * @param {string} [params.confirmationUrl] - Confirmation URL
+   * @param {string} [params.validationUrl] - Validation URL
+   * @returns {Promise<Object>} URL registration response
+   * @throws {Error} If URL registration fails
+   */
   async c2bRegisterUrl({ shortCode, responseType, confirmationUrl, validationUrl }) {
     try {
       if (!this.auth) await this.generateToken();
@@ -210,6 +286,16 @@ class DarajaSDK {
     }
   }
 
+  /**
+   * Simulates a C2B payment (only works in sandbox)
+   * @async
+   * @param {Object} params - C2B simulation parameters
+   * @param {number} params.amount - Amount to simulate
+   * @param {string} params.phoneNumber - Phone number making payment
+   * @param {string} params.billRefNumber - Bill reference number
+   * @returns {Promise<Object>} C2B simulation response
+   * @throws {Error} If simulation fails
+   */
   async c2bSimulate({ amount, phoneNumber, billRefNumber }) {
     try {
       if (!this.auth) await this.generateToken();
@@ -235,6 +321,17 @@ class DarajaSDK {
     }
   }
 
+  /**
+   * Initiates a Business to Business payment
+   * @async
+   * @param {Object} params - B2B parameters
+   * @param {number} params.amount - Amount to transfer
+   * @param {string} params.receiverShortCode - Recipient's short code
+   * @param {string} [params.commandID='BusinessToBusinessTransfer'] - Type of B2B payment
+   * @param {string} [params.remarks] - Additional remarks
+   * @returns {Promise<Object>} B2B response
+   * @throws {Error} If B2B payment fails
+   */
   async b2b({ amount, receiverShortCode, commandID = 'BusinessToBusinessTransfer', remarks }) {
     try {
       if (!this.auth) await this.generateToken();
@@ -267,6 +364,16 @@ class DarajaSDK {
     }
   }
 
+  /**
+   * Reverses an M-Pesa transaction
+   * @async
+   * @param {Object} params - Reversal parameters
+   * @param {string} params.transactionID - Transaction to reverse
+   * @param {number} params.amount - Amount to reverse
+   * @param {string} [params.remarks] - Reversal remarks
+   * @returns {Promise<Object>} Reversal response
+   * @throws {Error} If reversal fails
+   */
   async reversal({ transactionID, amount, remarks }) {
     try {
       if (!this.auth) await this.generateToken();
@@ -298,6 +405,14 @@ class DarajaSDK {
     }
   }
 
+  /**
+   * Checks the status of an STK push request
+   * @async
+   * @param {Object} params - Query parameters
+   * @param {string} params.checkoutRequestId - Checkout request ID
+   * @returns {Promise<Object>} STK query response
+   * @throws {Error} If query fails
+   */
   async stkPushQuery({ checkoutRequestId }) {
     try {
       if (!this.auth) await this.generateToken();
