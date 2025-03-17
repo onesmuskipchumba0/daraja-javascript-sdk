@@ -185,6 +185,145 @@ class DarajaSDK {
       throw new Error(`Account balance query failed: ${error.message}`);
     }
   }
+
+  async c2bRegisterUrl({ shortCode, responseType, confirmationUrl, validationUrl }) {
+    try {
+      if (!this.auth) await this.generateToken();
+
+      const response = await axios({
+        method: 'post',
+        url: `${this.baseUrl}/mpesa/c2b/v1/registerurl`,
+        headers: {
+          Authorization: `Bearer ${this.auth}`,
+        },
+        data: {
+          ShortCode: shortCode || this.businessShortCode,
+          ResponseType: responseType || 'Completed',
+          ConfirmationURL: confirmationUrl || this.callbackUrl,
+          ValidationURL: validationUrl || this.callbackUrl
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw new Error(`C2B URL registration failed: ${error.message}`);
+    }
+  }
+
+  async c2bSimulate({ amount, phoneNumber, billRefNumber }) {
+    try {
+      if (!this.auth) await this.generateToken();
+
+      const response = await axios({
+        method: 'post',
+        url: `${this.baseUrl}/mpesa/c2b/v1/simulate`,
+        headers: {
+          Authorization: `Bearer ${this.auth}`,
+        },
+        data: {
+          ShortCode: this.businessShortCode,
+          CommandID: 'CustomerPayBillOnline',
+          Amount: amount,
+          Msisdn: phoneNumber,
+          BillRefNumber: billRefNumber
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw new Error(`C2B simulation failed: ${error.message}`);
+    }
+  }
+
+  async b2b({ amount, receiverShortCode, commandID = 'BusinessToBusinessTransfer', remarks }) {
+    try {
+      if (!this.auth) await this.generateToken();
+
+      const response = await axios({
+        method: 'post',
+        url: `${this.baseUrl}/mpesa/b2b/v1/paymentrequest`,
+        headers: {
+          Authorization: `Bearer ${this.auth}`,
+        },
+        data: {
+          Initiator: this.initiatorName,
+          SecurityCredential: this.securityCredential,
+          CommandID: commandID,
+          SenderIdentifierType: '4',
+          RecieverIdentifierType: '4',
+          Amount: amount,
+          PartyA: this.businessShortCode,
+          PartyB: receiverShortCode,
+          AccountReference: 'B2B Payment',
+          Remarks: remarks || 'B2B Transfer',
+          QueueTimeOutURL: this.timeoutUrl,
+          ResultURL: this.resultUrl
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw new Error(`B2B payment failed: ${error.message}`);
+    }
+  }
+
+  async reversal({ transactionID, amount, remarks }) {
+    try {
+      if (!this.auth) await this.generateToken();
+
+      const response = await axios({
+        method: 'post',
+        url: `${this.baseUrl}/mpesa/reversal/v1/request`,
+        headers: {
+          Authorization: `Bearer ${this.auth}`,
+        },
+        data: {
+          Initiator: this.initiatorName,
+          SecurityCredential: this.securityCredential,
+          CommandID: 'TransactionReversal',
+          TransactionID: transactionID,
+          Amount: amount,
+          ReceiverParty: this.businessShortCode,
+          RecieverIdentifierType: '11',
+          ResultURL: this.resultUrl,
+          QueueTimeOutURL: this.timeoutUrl,
+          Remarks: remarks || 'Transaction Reversal',
+          Occasion: ''
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw new Error(`Transaction reversal failed: ${error.message}`);
+    }
+  }
+
+  async stkPushQuery({ checkoutRequestId }) {
+    try {
+      if (!this.auth) await this.generateToken();
+
+      const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, -3);
+      const password = Buffer.from(`${this.businessShortCode}${this.passKey}${timestamp}`).toString('base64');
+
+      const response = await axios({
+        method: 'post',
+        url: `${this.baseUrl}/mpesa/stkpushquery/v1/query`,
+        headers: {
+          Authorization: `Bearer ${this.auth}`,
+        },
+        data: {
+          BusinessShortCode: this.businessShortCode,
+          Password: password,
+          Timestamp: timestamp,
+          CheckoutRequestID: checkoutRequestId
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      throw new Error(`STK push query failed: ${error.message}`);
+    }
+  }
 }
 
 module.exports = DarajaSDK;
